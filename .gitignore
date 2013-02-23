@@ -28,3 +28,8 @@ libtool
 *.gcda
 app.info
 coverage_report
+depcomp
+install-sh
+missing
+serendipite
+
