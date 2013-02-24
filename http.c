@@ -4,8 +4,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include "macros.h"
-
-#define PACKAGE_STRING "Serendipite 0.1"
+#include "config.h"
 
 #define REQUEST_TEXT                                                           \
 "GET %s HTTP/1.0\r\n"                                                          \
