@@ -5,8 +5,18 @@
 #include <string.h>
 #include "macros.h"
 #include "json.h"
+#include "http.h"
 
 const int BUFFER_SIZE = 64 * 1024;
+#define LFM_HOST "ws.audioscrobbler.com"
+//#define LFM_HOST "localhost"
+#define NEW_RELEASE_URL                                                        \
+"/2.0/?method=user.getnewreleases"                                             \
+"&user=evok3r&api_key="                                                        \
+API_KEY                                                                        \
+"&format=json"
+
+#define API_KEY "d4ff4069de5ae7929d4037dc01313301"
 
 void json_callback(json_value* v) {
   switch(v->type) {
@@ -85,20 +95,45 @@ void artist_album_cb(json_value* v)
   }
 }
 
-int main(int argc, char* argv[])
+int httpreq(char** buffer, size_t* length)
 {
-  char buffer[BUFFER_SIZE];
-  int fd, total = 0, len = 0;
+  int socket_fd;
+  size_t request_text_length;
 
-  fd = open("test/lastfm.json", O_RDONLY);
-
-  SYSCALL(fd);
-
-  while((len = read(fd, buffer + total, BUFFER_SIZE))) {
-    total += len;
+  if ((socket_fd = http_connect(LFM_HOST)) < 0) {
+    LOG(LOG_CRITICAL, "Could not connect to %s.", LFM_HOST);
   }
 
-  parse_json(buffer, total, artist_album_cb);
+  http_request(NEW_RELEASE_URL, strlen(NEW_RELEASE_URL),
+               LFM_HOST, strlen(LFM_HOST), buffer, &request_text_length);
+
+  if (http_send_request(socket_fd, *buffer, request_text_length) == -1) {
+    LOG(LOG_CRITICAL, "Could not send request.");
+    exit(ERROR);
+  }
+
+  free(*buffer);
+
+  if (http_read_response(socket_fd, buffer, length)) {
+    LOG(LOG_CRITICAL, "Could not read request");
+    exit(ERROR);
+  }
+
+  http_close(socket_fd);
+
+  return OK;
+}
+
+int main(int argc, char* argv[])
+{
+  char* buffer;
+  size_t length, body_pos;
+
+  httpreq(&buffer, &length);
+
+  body_pos = http_body_offset(buffer, length);
+
+  parse_json(buffer + body_pos, length - body_pos, artist_album_cb);
 
   return 0;
 }

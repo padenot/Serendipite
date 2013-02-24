@@ -5,24 +5,12 @@
 #include <unistd.h>
 #include "macros.h"
 
-#define LFM_HOST "ws.audioscrobbler.com"
 #define PACKAGE_STRING "Serendipite 0.1"
-#define API_KEY "d4ff4069de5ae7929d4037dc01313301"
 
 #define REQUEST_TEXT                                                           \
-"GET %s HTTP/1.1\r\n"                                                          \
-"Host: %s\r\n"                                                                 \
-"User-Agent: "                                                                 \
-PACKAGE_STRING                                                                 \
-"\r\n"                                                                         \
-"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n"  \
-"Accept-Language: en-US,en;q=0.5\r\n\r\n"
-
-#define NEW_RELEASE_URL                                                        \
-"/2.0/?method=user.getnewreleases"                                             \
-"&user=evok3r&api_key="                                                        \
-API_KEY                                                                        \
-"&format=json"
+"GET %s HTTP/1.0\r\n"                                                          \
+"User-Agent: " PACKAGE_STRING "\r\n"                                           \
+"Host: %s\r\n\r\n"
 
 void http_request(const char* url, size_t url_length, const char* host,
                   size_t host_length, char** request, size_t* request_length)
@@ -38,7 +26,10 @@ void http_request(const char* url, size_t url_length, const char* host,
     exit(1);
   }
 
-  sprintf(*request, REQUEST_TEXT, url, host);
+  snprintf(*request, *request_length, REQUEST_TEXT, url, host);
+
+  /* remove the null byte */
+  (*request_length)--;
 }
 
 int http_connect(const char* host)
@@ -52,7 +43,7 @@ int http_connect(const char* host)
   h.ai_flags = 0;
   h.ai_protocol = 0;
 
-  if ((rv = getaddrinfo(LFM_HOST, "80", &h, &r))) {
+  if ((rv = getaddrinfo(host, "80", &h, &r))) {
     LOG(LOG_FATAL, "getaddrinfo: %s\n", gai_strerror(rv));
     return ERROR;
   }
@@ -80,12 +71,17 @@ int http_close(int fd)
 
 int http_send_request(int socket_fd, const char* request, size_t length)
 {
-  int rv = write(socket_fd, request, length);
-  if (rv == -1) {
+  int rv;
+  size_t offset = 0;
+
+  rv = write(socket_fd, request, length);
+
+  if (rv != length) {
     int e = errno;
     LOG(LOG_CRITICAL, "write() error: %s", strerror(e));
+    return -1;
   }
-  return rv;
+  return offset;
 }
 
 int http_read_response(int socket_fd, char** buffer, size_t* length)
@@ -98,45 +94,38 @@ int http_read_response(int socket_fd, char** buffer, size_t* length)
 
   *buffer = malloc(buffer_size);
 
-  while((rv = read(socket_fd, *buffer + offset, read_size))) {
+  while((rv = read(socket_fd, (*buffer) + offset, read_size)) > 0) {
     offset += rv;
-    if (rv == -1) {
-      int e = errno;
-      LOG(LOG_FATAL, "read() error: %s", strerror(e));
-      return ERROR;
-    }
     if (offset + read_size > buffer_size) {
       buffer_size *= 2;
       *buffer = realloc(*buffer, buffer_size);
     }
   }
 
+  if (rv == -1) {
+    int e = errno;
+    LOG(LOG_FATAL, "read() error: %s", strerror(e));
+    return ERROR;
+  }
+
   offset += rv;
+  *length = offset;
   (*buffer)[offset] = 0;
 
-  return offset;
+  return OK;
 }
 
-int main(int argc, char* argv[])
+size_t http_body_offset(char* buffer, size_t length)
 {
-  int socket_fd = http_connect(LFM_HOST);
-  size_t length, request_text_length;
-  char* buffer;
+  char* b = buffer;
 
-  http_request(NEW_RELEASE_URL, strlen(NEW_RELEASE_URL),
-          LFM_HOST, strlen(LFM_HOST), &buffer, &request_text_length);
-
-  http_send_request(socket_fd, buffer, strlen(buffer));
-
-  free(buffer);
-
-  http_read_response(socket_fd, &buffer, &length);
-
-  puts(buffer);
-
-  free(buffer);
-
-  http_close(socket_fd);
-
-  return OK;
+  while(length-- > 3) {
+    if (*buffer == '\r' && *(buffer+1) == '\n' &&
+        *(buffer+2) == '\r' && *(buffer+3) == '\n') {
+      return buffer - b + 4;
+    }
+    buffer++;
+  }
+  LOG(LOG_WARNING, "No body found in http response.");
+  return 0;
 }

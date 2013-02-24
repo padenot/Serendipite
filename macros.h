@@ -90,14 +90,14 @@ static const char* COLORS[COLORS_SIZE] = {
   /* If ASSERT_FATAL is defined, a failing asserts will kill the program. */
   #ifdef ASSERT_FATAL
     #define ASSERT(test, msg)                                                  \
-      if (!test) {                                                             \
+      if ((test == 0)) {                                                       \
         LOG(LOG_CRITICAL, "#! ASSERT FAILED %s:%d:%s\n",                       \
             __FILE__, __LINE__, #msg);                                         \
         abort();                                                               \
       }
   #else
     #define ASSERT(test, msg)                                                  \
-      if (test == 0) {                                                         \
+      if ((test == 0)) {                                                       \
         LOG(LOG_CRITICAL, "#! ASSERT FAILED %s:%d:%s\n",                       \
             __FILE__, __LINE__, #msg);                                         \
       }
