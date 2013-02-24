@@ -80,13 +80,13 @@ void artist_album_cb(json_value* v)
   if (v->kv == JSON_VALUE && got_name) {
     got_name = 0;
     if (lastfm_api_state == ALBUM) {
-      ASSERT(v->length + 5 < 512, "Not enough room in the buffer to put the album name");
+      ASSERT((v->length + 5) < 512, "Not enough room in the buffer to put the album name");
       len_album = v->length;
       strncpy(buffer, v->buffer + v->offset, v->length);
       strncpy(buffer + len_album, ", by ", strlen(", by "));
       len_album += strlen(", by ");
     } else if (lastfm_api_state == ARTIST) {
-      ASSERT(len_album + v->length < 512, "Not enough room in the buffer to put the artist name");
+      ASSERT((len_album + v->length) < 512, "Not enough room in the buffer to put the artist name");
       strncpy(buffer + len_album, v->buffer + v->offset, v->length);
       buffer[len_album + v->length] = 0;
       LOG(LOG_DEBUG, "%s", buffer);
@@ -133,6 +133,7 @@ int main(int argc, char* argv[])
 
   body_pos = http_body_offset(buffer, length);
 
+  LOG(LOG_OK, "New relases:");
   parse_json(buffer + body_pos, length - body_pos, artist_album_cb);
 
   return 0;

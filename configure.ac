@@ -22,7 +22,20 @@ AS_HELP_STRING([--enable-debug],
 esac],
 [debug=false])
 
+
 AM_CONDITIONAL(DEBUG, test x"$debug" = x"true")
+
+AC_ARG_ENABLE(colors,
+AS_HELP_STRING([--enable-colors],
+               [enable colorsging, default: no]),
+[case "${enableval}" in
+             yes) colors=true ;;
+             no)  colors=false ;;
+             *)   AC_MSG_ERROR([bad value ${enableval} for --enable-colors]) ;;
+esac],
+[colors=false])
+
+AM_CONDITIONAL(COLORS, test x"$colors" = x"true")
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

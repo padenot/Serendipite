@@ -13,3 +13,7 @@ else
 AM_CFLAGS = -O2
 AM_CXXFLAGS = -O2
 endif
+
+if COLORS
+AM_CFLAGS += -DCOLORS
+endif

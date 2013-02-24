@@ -26,8 +26,8 @@ typedef enum {
   ERROR = -1
 } _error_codes;
 
-#ifdef ENABLE_COLORS
-static const char* COLORS[COLORS_SIZE] = {
+#ifdef COLORS
+static const char* COLORS_ARRAY[COLORS_SIZE] = {
   "\e[1;91m", /* FATAL bold red. */
   "\e[0;91m", /* CRITICAL red. */
   "\e[0;93m", /* WARNING yellow. */
@@ -36,7 +36,7 @@ static const char* COLORS[COLORS_SIZE] = {
   "\e[0m"     /* reset. */
 };
 #else
-static const char* COLORS[COLORS_SIZE] = {
+static const char* COLORS_ARRAY[COLORS_SIZE] = {
   "",
   "",
   "",
@@ -50,8 +50,8 @@ static const char* COLORS[COLORS_SIZE] = {
         MACRO_BEG                                                              \
         if(x == -1) {                                                          \
           fprintf(stderr, "%s#! SYSCALL FAILED : %s:%d:%s:%s%s\n",             \
-                  COLORS[LOG_FATAL], __FILE__, __LINE__,                       \
-                  #x, strerror(errno), COLORS[COLOR_RESET]);                   \
+                  COLORS_ARRAY[LOG_FATAL], __FILE__, __LINE__,                 \
+                  #x, strerror(errno), COLORS_ARRAY[COLOR_RESET]);             \
           abort();                                                             \
         }                                                                      \
         MACRO_END
@@ -74,7 +74,7 @@ static const char* COLORS[COLORS_SIZE] = {
     MACRO_BEG                                                                  \
       if(level <= LOG_LEVEL) {                                                 \
         size_t i;                                                              \
-        fprintf(stdout, "%s", COLORS[level]);                                  \
+        fprintf(stdout, "%s", COLORS_ARRAY[level]);                            \
         for(i=0; i < log_indent_level ; i++) {                                 \
           fprintf(stdout, "\t");                                               \
         }                                                                      \
@@ -83,21 +83,21 @@ static const char* COLORS[COLORS_SIZE] = {
         }                                                                      \
         fprintf(stdout, __VA_ARGS__);                                          \
         fprintf(stdout, "\n");                                                 \
-        fprintf(stdout, "%s", COLORS[COLOR_RESET]);                            \
+        fprintf(stdout, "%s", COLORS_ARRAY[COLOR_RESET]);                      \
       }                                                                        \
     MACRO_END
 
   /* If ASSERT_FATAL is defined, a failing asserts will kill the program. */
   #ifdef ASSERT_FATAL
     #define ASSERT(test, msg)                                                  \
-      if ((test == 0)) {                                                       \
+      if ((test) == 0) {                                                       \
         LOG(LOG_CRITICAL, "#! ASSERT FAILED %s:%d:%s\n",                       \
             __FILE__, __LINE__, #msg);                                         \
         abort();                                                               \
       }
   #else
     #define ASSERT(test, msg)                                                  \
-      if ((test == 0)) {                                                       \
+      if ((test) == 0) {                                                       \
         LOG(LOG_CRITICAL, "#! ASSERT FAILED %s:%d:%s\n",                       \
             __FILE__, __LINE__, #msg);                                         \
       }
