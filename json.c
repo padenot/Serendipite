@@ -7,7 +7,8 @@ const char* type2str[] = {
   "arr"
 };
 
-int parse_json(char* buffer, size_t length, void (*callback)(json_value* v))
+int parse_json(char* buffer, size_t length, void* user_ptr,
+               void (*callback)(json_value* v, void* user_ptr))
 {
   size_t offset = 0;
   json_state state = JSON_INIT;
@@ -29,7 +30,7 @@ int parse_json(char* buffer, size_t length, void (*callback)(json_value* v))
           buffer
         };
         kvstate = JSON_KEY;
-        callback(&v);
+        callback(&v, user_ptr);
         depth++;
         break;
       };
@@ -53,7 +54,7 @@ int parse_json(char* buffer, size_t length, void (*callback)(json_value* v))
           };
           kvstate = JSON_KEY;
           state = JSON_INIT;
-          callback(&v);
+          callback(&v, user_ptr);
         }
         break;
       case ':':

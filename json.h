@@ -29,6 +29,6 @@ typedef struct  {
   char* buffer;
 } json_value;
 
-int parse_json(char* buffer, size_t length, void (*callback)(json_value* v));
+int parse_json(char* buffer, size_t length, void* user_ptr, void (*callback)(json_value* v, void* usr_ptr));
 
 extern const char* type2str[];

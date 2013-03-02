@@ -21,7 +21,7 @@ API_KEY                                                                        \
 
 #define API_KEY "d4ff4069de5ae7929d4037dc01313301"
 
-void json_callback(json_value* v) {
+void json_callback(json_value* v, void* user_ptr) {
   switch(v->type) {
     case JSON_STR: {
       char * str = malloc(v->length + 1);
@@ -60,42 +60,45 @@ void print(char* str, size_t len)
   putc('\n', stdout);
 }
 
-void artist_album_cb(json_value* v)
+struct artist_album_state {
+  int lastfm_api_state;
+  char buffer[512];
+  size_t len_album;
+  int got_name;
+};
+
+void artist_album_cb(json_value* v, void* user_ptr)
 {
-  static int lastfm_api_state = NOTHING;
-  static char buffer[512];
-  static char wbuffer[512];
-  static size_t len_album = 0;
-  static int got_name = 0;
+  struct artist_album_state * s = (struct artist_album_state *) user_ptr;
   if (v->kv == JSON_KEY && v->length && strncmp(v->buffer + v->offset, "name", v->length) == 0) {
-    got_name = 1;
-    switch(lastfm_api_state) {
+    s->got_name = 1;
+    switch(s->lastfm_api_state) {
       case NOTHING:
-        lastfm_api_state = ALBUM;
+        s->lastfm_api_state = ALBUM;
         break;
       case ALBUM:
-        lastfm_api_state = ARTIST;
+        s->lastfm_api_state = ARTIST;
         break;
       case ARTIST:
-        lastfm_api_state = NOTHING;
+        s->lastfm_api_state = NOTHING;
     }
   }
 
-  if (v->kv == JSON_VALUE && got_name) {
-    got_name = 0;
-    if (lastfm_api_state == ALBUM) {
+  if (v->kv == JSON_VALUE && s->got_name) {
+    s->got_name = 0;
+    if (s->lastfm_api_state == ALBUM) {
       ASSERT((v->length + 5) < 512, "Not enough room in the buffer to put the album name");
-      len_album = v->length;
-      strncpy(buffer, v->buffer + v->offset, v->length);
-      strncpy(buffer + len_album, ", by ", strlen(", by "));
-      len_album += strlen(", by ");
-    } else if (lastfm_api_state == ARTIST) {
-      ASSERT((len_album + v->length) < 512, "Not enough room in the buffer to put the artist name");
-      strncpy(buffer + len_album, v->buffer + v->offset, v->length);
-      buffer[len_album + v->length] = 0;
-      u8_unescape(wbuffer, 512, buffer);
-      printf("%s\n", wbuffer);
-      lastfm_api_state = NOTHING;
+      s->len_album = v->length;
+      strncpy(s->buffer, v->buffer + v->offset, v->length);
+      strncpy(s->buffer + s->len_album, ", by ", strlen(", by "));
+      s->len_album += strlen(", by ");
+    } else if (s->lastfm_api_state == ARTIST) {
+      ASSERT((s->len_album + v->length) < 512, "Not enough room in the buffer to put the artist name");
+      strncpy(s->buffer + s->len_album, v->buffer + v->offset, v->length);
+      s->buffer[s->len_album + v->length] = 0;
+      u8_unescape(s->buffer, 512, s->buffer);
+      printf("%s\n", s->buffer);
+      s->lastfm_api_state = NOTHING;
     }
   }
 }
@@ -107,6 +110,7 @@ int httpreq(char** buffer, size_t* length)
 
   if ((socket_fd = http_connect(LFM_HOST)) < 0) {
     LOG(LOG_CRITICAL, "Could not connect to %s.", LFM_HOST);
+    exit(ERROR);
   }
 
   http_request(NEW_RELEASE_URL, strlen(NEW_RELEASE_URL),
@@ -133,6 +137,7 @@ int main(int argc, char* argv[])
 {
   char* buffer;
   size_t length, body_pos;
+  struct artist_album_state state = {0};
 
   setlocale(LC_ALL, "");
 
@@ -141,7 +146,7 @@ int main(int argc, char* argv[])
   body_pos = http_body_offset(buffer, length);
 
   LOG(LOG_OK, "New relases:");
-  parse_json(buffer + body_pos, length - body_pos, artist_album_cb);
+  parse_json(buffer + body_pos, length - body_pos, (void*)&state, artist_album_cb);
 
   return 0;
 }
