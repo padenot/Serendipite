@@ -5,6 +5,7 @@
 ```sh
 ./autogen.sh
 ./configure --enable-debug --enable-colors
+make -f Makefile_spotify
 make
 ```
 
