@@ -9,6 +9,7 @@
 #include "json.h"
 #include "http.h"
 #include "external/utf8.h"
+#include "spotify.h"
 
 #define LFM_HOST "ws.audioscrobbler.com"
 #define NEW_RELEASE_URL                                                        \
@@ -62,6 +63,8 @@ struct artist_album_state {
   int lastfm_api_state;
   char buffer[512];
   size_t len_album;
+  char* result[30];
+  int result_index;
   int got_name;
 };
 
@@ -92,10 +95,17 @@ void artist_album_cb(json_value* v, void* user_ptr)
       s->len_album += strlen(", by ");
     } else if (s->lastfm_api_state == ARTIST) {
       ASSERT((s->len_album + v->length) < 512, "Not enough room in the buffer to put the artist name");
+      ASSERT(s->result_index < 30, "implement realloc for callback");
+
       strncpy(s->buffer + s->len_album, v->buffer + v->offset, v->length);
       s->buffer[s->len_album + v->length] = 0;
+
       u8_unescape(s->buffer, 512, s->buffer);
-      printf("%s\n", s->buffer);
+
+      s->result[s->result_index] = malloc(strlen(s->buffer) + 1);
+      strcpy(s->result[s->result_index], s->buffer);
+      s->result_index++;
+
       s->lastfm_api_state = NOTHING;
     }
   }
@@ -131,11 +141,17 @@ int httpreq(char** buffer, size_t* length)
   return OK;
 }
 
+void spotify_callback(sp_session* session)
+{
+  printf("in callback\n");
+}
+
 int main(int argc, char* argv[])
 {
   char* buffer;
   size_t length, body_pos;
   struct artist_album_state state = {0};
+  int i;
 
   setlocale(LC_ALL, "");
 
@@ -146,7 +162,17 @@ int main(int argc, char* argv[])
   LOG(LOG_OK, "New relases:");
   parse_json(buffer + body_pos, length - body_pos, (void*)&state, artist_album_cb);
 
+  for (i = 0; i < state.result_index; i++) {
+    printf("%d. %s\n", i, state.result[i]);
+  }
+
+  spotify_main_loop(argv[1], argv[2], spotify_callback);
+
   free(buffer);
+
+  for (i = 0; i < state.result_index; i++) {
+   free(state.result[i]);
+  }
 
   return 0;
 }
