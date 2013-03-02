@@ -11,6 +11,9 @@ AM_INIT_AUTOMAKE(serendipite, main)
 AC_PROG_CC
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
+AC_CHECK_PROGS(wget,[wget],no)
+AC_CHECK_PROGS(tar,[tar],no)
+AC_CHECK_PROGS(find,[find],no)
 
 AC_ARG_ENABLE(debug,
 AS_HELP_STRING([--enable-debug],
