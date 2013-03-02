@@ -10,9 +10,7 @@
 #include "http.h"
 #include "external/utf8.h"
 
-const int BUFFER_SIZE = 64 * 1024;
 #define LFM_HOST "ws.audioscrobbler.com"
-//#define LFM_HOST "localhost"
 #define NEW_RELEASE_URL                                                        \
 "/2.0/?method=user.getnewreleases"                                             \
 "&user=evok3r&api_key="                                                        \
@@ -147,6 +145,8 @@ int main(int argc, char* argv[])
 
   LOG(LOG_OK, "New relases:");
   parse_json(buffer + body_pos, length - body_pos, (void*)&state, artist_album_cb);
+
+  free(buffer);
 
   return 0;
 }
