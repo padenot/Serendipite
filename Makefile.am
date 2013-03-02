@@ -4,7 +4,7 @@ CFLAGS = -Wall
 include_HEADERS = json.h http.h
 
 bin_PROGRAMS = serendipite
-serendipite_SOURCES = json.c http.c main.c
+serendipite_SOURCES = json.c http.c main.c external/utf8.c
 
 if DEBUG
 AM_CFLAGS = -g3 -O0 -DDEBUG

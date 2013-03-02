@@ -3,9 +3,12 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
+#include <wchar.h>
 #include "macros.h"
 #include "json.h"
 #include "http.h"
+#include "external/utf8.h"
 
 const int BUFFER_SIZE = 64 * 1024;
 #define LFM_HOST "ws.audioscrobbler.com"
@@ -61,6 +64,7 @@ void artist_album_cb(json_value* v)
 {
   static int lastfm_api_state = NOTHING;
   static char buffer[512];
+  static char wbuffer[512];
   static size_t len_album = 0;
   static int got_name = 0;
   if (v->kv == JSON_KEY && v->length && strncmp(v->buffer + v->offset, "name", v->length) == 0) {
@@ -89,7 +93,8 @@ void artist_album_cb(json_value* v)
       ASSERT((len_album + v->length) < 512, "Not enough room in the buffer to put the artist name");
       strncpy(buffer + len_album, v->buffer + v->offset, v->length);
       buffer[len_album + v->length] = 0;
-      LOG(LOG_DEBUG, "%s", buffer);
+      u8_unescape(wbuffer, 512, buffer);
+      printf("%s\n", wbuffer);
       lastfm_api_state = NOTHING;
     }
   }
@@ -128,6 +133,8 @@ int main(int argc, char* argv[])
 {
   char* buffer;
   size_t length, body_pos;
+
+  setlocale(LC_ALL, "");
 
   httpreq(&buffer, &length);
 
