@@ -1,3 +1,6 @@
+#ifndef HTTP_H
+#define HTTP_H
+
 /**
  * Connect to `host` on port 80.
  * returns a socket fd.
@@ -29,3 +32,5 @@ int http_read_response(int fd, char** buffer, size_t* length);
  * Return the position of the first character of the request body.
  */
 size_t http_body_offset(char* buffer, size_t length);
+
+#endif /* HTTP_H */

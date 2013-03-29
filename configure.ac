@@ -1,7 +1,3 @@
-#                                               -*- Autoconf -*-
-# Process this file with autoconf to produce a configure script.
-
-#AC_PREREQ(2.60)
 AC_INIT(Serendipite, 0.1, paul@paul.cx)
 AC_CONFIG_SRCDIR([json.c])
 AC_CONFIG_HEADER([config.h])

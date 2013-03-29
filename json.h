@@ -1,3 +1,5 @@
+#ifndef JSON_H
+#define JSON_H
 
 typedef enum {
   JSON_INIT,
@@ -32,3 +34,5 @@ typedef struct  {
 int parse_json(char* buffer, size_t length, void* user_ptr, void (*callback)(json_value* v, void* usr_ptr));
 
 extern const char* type2str[];
+
+#endif /* JSON_H */
