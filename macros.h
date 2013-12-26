@@ -79,7 +79,7 @@ static const char* COLORS_ARRAY[COLORS_SIZE] = {
           fprintf(stdout, "\t");                                               \
         }                                                                      \
         if (pthread_self() != 0) {                                             \
-          fprintf(stdout, "[%ld] ", pthread_self());                           \
+          fprintf(stdout, "[0x%x] ", (unsigned int)pthread_self());            \
         }                                                                      \
         fprintf(stdout, __VA_ARGS__);                                          \
         fprintf(stdout, "\n");                                                 \
@@ -207,6 +207,9 @@ static const char* COLORS_ARRAY[COLORS_SIZE] = {
 #else
 # define UNUSED(x) x
 #endif
+
+/* the famous array_size macro */
+#define array_size(x) (sizeof(x) / sizeof(x[0]))
 
 /**
  * Traces the allocations and the deallocations.

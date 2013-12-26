@@ -32,4 +32,11 @@ depcomp
 install-sh
 missing
 serendipite
+run.sh
+external/libspotify-12.1.51-Linux-x86_64-release/
+external/spotify/
+lastfmreleases
+meh
+spotifycreateplaylist
+tmp/
 
