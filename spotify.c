@@ -7,6 +7,8 @@
 #include "macros.h"
 #include "config.h"
 
+const char * CREDENTIAL_BLOB_PATH = PACKAGE_STRING"/credentials";
+
 extern const char g_appkey[];
 extern const size_t g_appkey_size;
 
@@ -71,6 +73,47 @@ void end_of_track(sp_session *session)
   ASSERT(1, "Not implemented.");
 }
 
+void credentials_blob_updated(sp_session * session, const char * blob)
+{
+  FILE * f = fopen(CREDENTIAL_BLOB_PATH, "w");
+
+  if (!f) {
+    LOG(LOG_WARNING, "Could not open user credentials file (%s).", strerror(errno));
+    return;
+  }
+
+  if (fputs(blob, f) < 0) {
+    LOG(LOG_WARNING, "Could not write user credentials file (%s).", strerror(errno));
+    return;
+  }
+
+  if (fclose(f)) {
+    LOG(LOG_WARNING, "Could not close user credentials file (%s).", strerror(errno));
+    return;
+  }
+
+  LOG(LOG_OK, "Credentials stored: %s", blob);
+}
+
+void retrieve_credential_blob(char * blob, size_t len)
+{
+  FILE * f = fopen(CREDENTIAL_BLOB_PATH, "r");
+  if (!f) {
+    LOG(LOG_WARNING, "Could not open user credentials file (%s).", strerror(errno));
+    return;
+  }
+
+  if (fgets(blob, len, f) == NULL) {
+    LOG(LOG_WARNING, "Could not read user credentials file (%s).", strerror(errno));
+    return;
+  }
+
+  if (fclose(f)) {
+    LOG(LOG_WARNING, "Could not close user credentials file (%s).", strerror(errno));
+    return;
+  }
+}
+
 static sp_session_callbacks session_callbacks = {
   .logged_in = &logged_in,
   .logged_out = &logged_out,
@@ -81,12 +124,13 @@ static sp_session_callbacks session_callbacks = {
   .play_token_lost = &play_token_lost,
   .log_message = &log_message,
   .end_of_track = &end_of_track,
+  .credentials_blob_updated = credentials_blob_updated
 };
 
 static sp_session_config spconfig = {
   .api_version = SPOTIFY_API_VERSION,
-  .cache_location = "tmp",
-  .settings_location = "tmp",
+  .cache_location = PACKAGE_STRING,
+  .settings_location = PACKAGE_STRING,
   .application_key = g_appkey,
   .application_key_size = 0,
   .user_agent = PACKAGE_STRING,
@@ -99,6 +143,7 @@ int spotify_init(const char * username, const char * password)
   sp_error error;
   sp_session *session;
   spconfig.application_key_size = g_appkey_size;
+  char blob[256] = { 0 };
 
   // Register the callbacks.
   spconfig.callbacks = &session_callbacks;
@@ -109,7 +154,13 @@ int spotify_init(const char * username, const char * password)
     return 2;
   }
 
-  error = sp_session_login(session, username, password, 0, NULL);
+  if (strlen(password) == 0) {
+    retrieve_credential_blob(blob, array_size(blob));
+    error = sp_session_login(session, username, NULL, 0, blob);
+  } else {
+    error = sp_session_login(session, username, password, 0, NULL);
+  }
+
 
   if (SP_ERROR_OK != error) {
     LOG(LOG_CRITICAL, "failed to login: %s", sp_error_message(error));
@@ -213,7 +264,7 @@ int spotify_playlist_url(sp_playlist * playlist, char * buffer, size_t len)
   return OK;
 }
 
-int spotify_main_loop_init(char * username, char * password, void (*callback)(sp_session*))
+int spotify_main_loop_init(const char * username, const char * password, void (*callback)(sp_session*))
 {
   g_callback = callback;
   pthread_mutex_init(&notify_mutex, NULL);
