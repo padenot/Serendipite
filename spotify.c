@@ -12,7 +12,7 @@ const char * CREDENTIAL_BLOB_PATH = PACKAGE_STRING"/credentials";
 extern const char g_appkey[];
 extern const size_t g_appkey_size;
 
-sp_session *g_session;
+sp_session *g_session = 0;
 
 static int notify_events;
 static pthread_mutex_t notify_mutex;
@@ -181,9 +181,10 @@ int spotify_shutdown()
   if (sp_session_logout(g_session) != SP_ERROR_OK) {
     LOG(LOG_WARNING, "Could not logout.");
   }
-  if (sp_session_release(g_session) != SP_ERROR_OK) {
-    LOG(LOG_WARNING, "Could not release spotify session.");
-  }
+  // if (sp_session_release(g_session) != SP_ERROR_OK) {
+  //   LOG(LOG_WARNING, "Could not release spotify session.");
+  // }
+
   return 0;
 }
 
@@ -261,7 +262,80 @@ int spotify_playlist_url(sp_playlist * playlist, char * buffer, size_t len)
     return ERROR;
   }
 
+  sp_link_release(playlist_link);
+
   return OK;
+}
+
+int spotify_add_track_to_playlist(const char * track_url, sp_playlist * playlist)
+{
+  sp_link * link;
+  sp_track * track;
+  sp_error rv;
+  int track_count;
+
+  link = sp_link_create_from_string(track_url);
+
+  if (link == NULL) {
+    LOG(LOG_WARNING, "Failed to create link for track %s.", track_url);
+    return ERROR;
+  }
+
+  if (sp_link_type(link) != SP_LINKTYPE_TRACK) {
+    sp_link_release(link);
+    LOG(LOG_WARNING, "%s is not a valid track link.", track_url);
+    return ERROR;
+  }
+
+  track = sp_link_as_track(link);
+  if (!track) {
+    sp_link_release(link);
+    LOG(LOG_WARNING, "Could not get the track from the link.");
+    return ERROR;
+  }
+
+  /* append */
+  track_count = sp_playlist_num_tracks(playlist);
+  rv = sp_playlist_add_tracks(playlist, &track, 1, track_count, g_session);
+  if (rv != SP_ERROR_OK) {
+    LOG(LOG_CRITICAL, "Could not add track: %s", sp_error_message(rv));
+
+    sp_link_release(link);
+    sp_track_release(track);
+
+    return ERROR;
+  }
+
+  sp_link_release(link);
+  sp_track_release(track);
+
+  return OK;
+}
+
+sp_playlist * spotify_load_playlist_from_url(char * url)
+{
+  sp_playlist* playlist;
+  sp_link * link;
+
+  ASSERT(g_session, "Should have a session.");
+  link = sp_link_create_from_string(url);
+
+  if (sp_link_type(link) != SP_LINKTYPE_PLAYLIST) {
+    LOG(LOG_WARNING, "%s is not a valid playlist link.", url);
+    return NULL;
+  }
+
+  playlist = sp_playlist_create(g_session, link);
+
+  sp_playlist_callbacks playlist_callbacks = {
+    .tracks_added = tracks_added,
+    .playlist_update_in_progress = playlist_update_in_progress,
+  };
+  sp_playlist_add_callbacks(playlist, &playlist_callbacks, NULL);
+
+  sp_link_release(link);
+
+  return playlist;
 }
 
 int spotify_main_loop_init(const char * username, const char * password, void (*callback)(sp_session*))
