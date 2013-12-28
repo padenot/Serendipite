@@ -15,6 +15,8 @@ extern const size_t g_appkey_size;
 sp_session *g_session = 0;
 
 static int notify_events;
+static int g_can_exit = 0;
+static int g_operations_pending = 0;
 static pthread_mutex_t notify_mutex;
 static pthread_cond_t notify_cond;
 void (*g_callback)(sp_session*) = 0;
@@ -31,8 +33,11 @@ static void logged_in(sp_session *session, sp_error error)
 
 static void logged_out(sp_session *session)
 {
-  LOG(LOG_OK, "Logged out");
-  exit(0);
+  LOG(LOG_OK, "Logged out.");
+  pthread_mutex_lock(&notify_mutex);
+  g_can_exit = 1;
+  pthread_cond_signal(&notify_cond);
+  pthread_mutex_unlock(&notify_mutex);
 }
 
 static void connection_error(sp_session *session, sp_error error)
@@ -173,17 +178,24 @@ int spotify_init(const char * username, const char * password)
 
 int spotify_shutdown()
 {
+  pthread_mutex_lock(&notify_mutex);
+  LOG(LOG_OK, "Logging out.");
+  if (sp_session_logout(g_session) != SP_ERROR_OK) {
+    LOG(LOG_WARNING, "Could not logout.");
+  }
+  while (g_operations_pending) {
+    pthread_cond_signal(&notify_cond);
+    pthread_mutex_unlock(&notify_mutex);
+    return 0;
+  }
+  pthread_cond_signal(&notify_cond);
+  pthread_mutex_unlock(&notify_mutex);
+
   LOG(LOG_OK, "Shutting down spotify session.");
   if (!g_session) {
     LOG(LOG_WARNING, "Not logged in, cannot shutdown session.");
     return 0;
   }
-  if (sp_session_logout(g_session) != SP_ERROR_OK) {
-    LOG(LOG_WARNING, "Could not logout.");
-  }
-  // if (sp_session_release(g_session) != SP_ERROR_OK) {
-  //   LOG(LOG_WARNING, "Could not release spotify session.");
-  // }
 
   return 0;
 }
@@ -195,6 +207,12 @@ void tracks_added(sp_playlist *pl, sp_track *const *tracks, int num_tracks, int 
 void playlist_update_in_progress(sp_playlist *pl, bool done, void *userdata)
 {
   LOG(LOG_OK, "playlist update in progress (finished: %s).", done ? "true" : "false");
+  pthread_mutex_lock(&notify_mutex);
+  g_operations_pending = done ? 0 : 1;
+  pthread_mutex_unlock(&notify_mutex);
+  if (done) {
+    notify_main_thread(g_session);
+  }
 }
 
 void container_loaded(sp_playlistcontainer *pc, void *userdata)
@@ -202,29 +220,44 @@ void container_loaded(sp_playlistcontainer *pc, void *userdata)
   LOG(LOG_OK, "Playlist container loaded.");
 }
 
-int search_complete() {
-  ASSERT(1, "Not implemented.");
-  return OK;
+void search_complete(sp_search * result, void * userdata) {
+  ASSERT(sp_search_is_loaded(result), "Search should be loaded.");
+
+  void (*callback)(sp_album*) = userdata;
+
+  sp_error rv = sp_search_error(result);
+  if(rv != SP_ERROR_OK) {
+    LOG(LOG_WARNING, "Search error: %s", sp_error_message(rv));
+    goto cleanup;
+  }
+
+  if (sp_search_num_albums(result) == 0) {
+    LOG(LOG_WARNING, "No result for query %s", sp_search_query(result));
+    goto cleanup;
+  }
+
+  sp_album* album = sp_search_album(result, 0);
+  callback(album);
+
+cleanup:
+  sp_search_release(result);
 }
 
-int spotify_do_search(char* search, void ** result)
+int spotify_search_album(char* search, void (*callback)(sp_album*))
 {
-  ASSERT(1, "Not implemented.");
   ASSERT(g_session, "Should have a session if we do a search.");
- //  sp_search* sp_search_create   (g_session,
- //    search,
- //    0   track_offset,
- //    0   track_count,
- //    0   album_offset,
- //    10   album_count,
- //    0   artist_offset,
- //    10   artist_count,
- //    0   playlist_offset,
- //    0   playlist_count,
- //    SP_SEARCH_STANDARD,
- //    search_complete_cb *    callback,
- //    void *    userdata   
- //  );
+  sp_search * s;
+
+  s = sp_search_create(g_session,
+                       search,
+                       0, 0, // tracks
+                       0, 1, // artist
+                       0, 0, // album
+                       0, 0, // playlists
+                       SP_SEARCH_STANDARD,
+                       search_complete,
+                       (void*)callback);
+  sp_search_query(s);
   return OK;
 }
 
@@ -267,47 +300,95 @@ int spotify_playlist_url(sp_playlist * playlist, char * buffer, size_t len)
   return OK;
 }
 
-int spotify_add_track_to_playlist(const char * track_url, sp_playlist * playlist)
+void albumbrowse_callback(sp_albumbrowse *result, void *userdata)
+{
+  int album_track_count,
+      playlist_track_count,
+      rv,
+      i;
+  sp_playlist * playlist = userdata;
+  sp_track * track;
+
+  playlist_track_count = sp_playlist_num_tracks(playlist);
+  album_track_count = sp_albumbrowse_num_tracks(result);
+
+  LOG(LOG_OK, "Adding %d tracks to a playlist of %d tracks.", album_track_count, playlist_track_count);
+
+  for (i = 0; i < album_track_count; i++) {
+    track = sp_albumbrowse_track(result, i);
+    rv = sp_playlist_add_tracks(playlist, &track, 1, playlist_track_count + i, g_session);
+    if (rv != SP_ERROR_OK) {
+      LOG(LOG_CRITICAL, "Could not add track: %s", sp_error_message(rv));
+    } else {
+      LOG(LOG_OK, "One track added.");
+    }
+    sp_track_release(track);
+  }
+  sp_albumbrowse_release(result);
+
+  pthread_mutex_lock(&notify_mutex);
+  g_operations_pending = 0;
+  pthread_cond_signal(&notify_cond);
+  pthread_mutex_unlock(&notify_mutex);
+}
+
+int spotify_add_url_to_playlist(const char * link_text, sp_playlist * playlist)
 {
   sp_link * link;
   sp_track * track;
   sp_error rv;
   int track_count;
 
-  link = sp_link_create_from_string(track_url);
+  link = sp_link_create_from_string(link_text);
 
   if (link == NULL) {
-    LOG(LOG_WARNING, "Failed to create link for track %s.", track_url);
+    LOG(LOG_WARNING, "Failed to create link for string %s.", link_text);
     return ERROR;
   }
 
-  if (sp_link_type(link) != SP_LINKTYPE_TRACK) {
-    sp_link_release(link);
-    LOG(LOG_WARNING, "%s is not a valid track link.", track_url);
-    return ERROR;
+  switch (sp_link_type(link)) {
+    case SP_LINKTYPE_ALBUM: {
+        sp_album * album = sp_link_as_album(link);
+
+        if (!album) {
+          sp_link_release(link);
+          LOG(LOG_WARNING, "Could not get the album from the link.");
+          return ERROR;
+        }
+
+        pthread_mutex_lock(&notify_mutex);
+        g_operations_pending = 1;
+        pthread_mutex_unlock(&notify_mutex);
+
+        sp_albumbrowse_create(g_session, album, albumbrowse_callback, (void*)playlist);
+        sp_link_release(link);
+      }
+      break;
+    case SP_LINKTYPE_TRACK: {
+        sp_track * track = sp_link_as_track(link);
+        if (!track) {
+          sp_link_release(link);
+          LOG(LOG_WARNING, "Could not get the track from the link.");
+          return ERROR;
+        }
+
+        /* append */
+        track_count = sp_playlist_num_tracks(playlist);
+        rv = sp_playlist_add_tracks(playlist, &track, 1, track_count, g_session);
+        if (rv != SP_ERROR_OK) {
+          LOG(LOG_CRITICAL, "Could not add track: %s", sp_error_message(rv));
+        }
+        sp_link_release(link);
+        sp_track_release(track);
+      }
+      break;
+    case SP_LINKTYPE_ARTIST:
+      break;
+    case SP_LINKTYPE_SEARCH:
+      break;
+    default:
+      LOG(LOG_WARNING, "Don't know what to do with %s.", link_text);
   }
-
-  track = sp_link_as_track(link);
-  if (!track) {
-    sp_link_release(link);
-    LOG(LOG_WARNING, "Could not get the track from the link.");
-    return ERROR;
-  }
-
-  /* append */
-  track_count = sp_playlist_num_tracks(playlist);
-  rv = sp_playlist_add_tracks(playlist, &track, 1, track_count, g_session);
-  if (rv != SP_ERROR_OK) {
-    LOG(LOG_CRITICAL, "Could not add track: %s", sp_error_message(rv));
-
-    sp_link_release(link);
-    sp_track_release(track);
-
-    return ERROR;
-  }
-
-  sp_link_release(link);
-  sp_track_release(track);
 
   return OK;
 }
@@ -383,6 +464,7 @@ int spotify_main_loop()
     }
 
     notify_events = 0;
+
     pthread_mutex_unlock(&notify_mutex);
 
     do {
@@ -390,6 +472,10 @@ int spotify_main_loop()
     } while (next_timeout == 0);
 
     pthread_mutex_lock(&notify_mutex);
+
+    if (g_can_exit) {
+      break;
+    }
   }
 
   return 0;

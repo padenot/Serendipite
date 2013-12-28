@@ -74,16 +74,16 @@ static const char* COLORS_ARRAY[COLORS_SIZE] = {
     MACRO_BEG                                                                  \
       if(level <= LOG_LEVEL) {                                                 \
         size_t i;                                                              \
-        fprintf(stdout, "%s", COLORS_ARRAY[level]);                            \
+        fprintf(stderr, "%s", COLORS_ARRAY[level]);                            \
         for(i=0; i < log_indent_level ; i++) {                                 \
-          fprintf(stdout, "\t");                                               \
+          fprintf(stderr, "\t");                                               \
         }                                                                      \
         if (pthread_self() != 0) {                                             \
-          fprintf(stdout, "[0x%x] ", (unsigned int)pthread_self());            \
+          fprintf(stderr, "[0x%x] ", (unsigned int)pthread_self());            \
         }                                                                      \
-        fprintf(stdout, __VA_ARGS__);                                          \
-        fprintf(stdout, "\n");                                                 \
-        fprintf(stdout, "%s", COLORS_ARRAY[COLOR_RESET]);                      \
+        fprintf(stderr, __VA_ARGS__);                                          \
+        fprintf(stderr, "\n");                                                 \
+        fprintf(stderr, "%s", COLORS_ARRAY[COLOR_RESET]);                      \
       }                                                                        \
     MACRO_END
 

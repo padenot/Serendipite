@@ -16,7 +16,6 @@ void cleanup_spotify_session(int signal)
   if (spotify_shutdown()) {
     LOG(LOG_WARNING, "Could not exist spotify session properly.");
   }
-  exit(0);
 }
 
 void spotify_callback(sp_session* session)
@@ -35,8 +34,9 @@ void spotify_callback(sp_session* session)
         linebuffer[i] = '\0';
       }
     }
+    printf("###%s###\n", linebuffer);
 
-    if (spotify_add_track_to_playlist(linebuffer, playlist) != OK) {
+    if (spotify_add_url_to_playlist(linebuffer, playlist) != OK) {
       LOG(LOG_CRITICAL, "Could not add track %s to playlist %s.", linebuffer, g_playlist_url);
     } else {
       LOG(LOG_OK, "%s added to %s.", linebuffer, g_playlist_url);
@@ -45,7 +45,6 @@ void spotify_callback(sp_session* session)
 
   sp_playlist_release(playlist);
 
-  LOG(LOG_OK, "Exiting...");
   cleanup_spotify_session(0);
 }
 
